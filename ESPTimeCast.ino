@@ -3,13 +3,15 @@
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include <MD_Parola.h>
-#include <MD_MAX72XX.h>
+#include <MD_MAX72xx.h>
 #include <SPI.h>
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <DNSServer.h>
 #include <sntp.h>
 #include <time.h>
+#include <Wire.h>
+#include <Adafruit_VEML7700.h>
 
 #include "mfactoryfont.h"  // Custom font
 #include "tz_lookup.h"     // Timezone lookup, do not duplicate mapping here!
@@ -20,9 +22,12 @@
 #define CLK_PIN 12
 #define DATA_PIN 15
 #define CS_PIN 13
+#define SDA_PIN 4  // D2 on Wemos D1 Mini
+#define SCL_PIN 5  // D1 on Wemos D1 Mini
 
 MD_Parola P = MD_Parola(HARDWARE_TYPE, DATA_PIN, CLK_PIN, CS_PIN, MAX_DEVICES);
 AsyncWebServer server(80);
+Adafruit_VEML7700 veml = Adafruit_VEML7700();
 
 // WiFi and configuration globals
 char ssid[32] = "";
@@ -52,6 +57,14 @@ int dimStartMinute = 0;
 int dimEndHour = 8;      // 8am default
 int dimEndMinute = 0;
 int dimBrightness = 2;   // Dimming level (0-15)
+
+// VEML7700 Light Sensor
+bool vemlEnabled = false;
+bool showLux = false;
+int luxThreshold = 10;    // LUX threshold for turning off display
+float currentLux = 0;     // Current LUX reading
+unsigned long lastLuxCheck = 0;
+const unsigned long luxCheckInterval = 5000; // Check LUX every 5 seconds
 
 // State management
 bool weatherCycleStarted = false;
@@ -125,6 +138,9 @@ void loadConfig() {
     doc[F("dimStartHour")] = dimStartHour;
     doc[F("dimEndHour")] = dimEndHour;
     doc[F("dimBrightness")] = dimBrightness;
+    doc[F("vemlEnabled")] = vemlEnabled;
+    doc[F("showLux")] = showLux;
+    doc[F("luxThreshold")] = luxThreshold;
     File f = LittleFS.open("/config.json", "w");
     if (f) {
       serializeJsonPretty(doc, f);
@@ -181,6 +197,15 @@ void loadConfig() {
   dimEndHour = doc["dimEndHour"] | 8;
   dimEndMinute = doc["dimEndMinute"] | 0;
   dimBrightness = doc["dimBrightness"] | 0;
+
+  // VEML7700 settings
+  String ve = doc["vemlEnabled"].as<String>();
+  vemlEnabled = (ve == "true" || ve == "on" || ve == "1");
+  
+  String sl = doc["showLux"].as<String>();
+  showLux = (sl == "true" || sl == "on" || sl == "1");
+  
+  luxThreshold = doc["luxThreshold"] | 10;
 
   strlcpy(ntpServer1, doc["ntpServer1"] | "pool.ntp.org", sizeof(ntpServer1));
   strlcpy(ntpServer2, doc["ntpServer2"] | "time.nist.gov", sizeof(ntpServer2));
@@ -328,6 +353,9 @@ void printConfigToSerial() {
   Serial.print(F("Dimming End Hour: ")); Serial.println(dimEndHour);
   Serial.print(F("Dimming End Minute: ")); Serial.println(dimEndMinute);
   Serial.print(F("Dimming Brightness: ")); Serial.println(dimBrightness);
+  Serial.print(F("VEML7700 Enabled: ")); Serial.println(vemlEnabled ? "Yes" : "No");
+  Serial.print(F("Show LUX: ")); Serial.println(showLux ? "Yes" : "No");
+  Serial.print(F("LUX Threshold: ")); Serial.println(luxThreshold);
   Serial.println(F("========================================"));
   Serial.println();
 }
@@ -405,6 +433,9 @@ void setupWebServer() {
       else if (n == "dimEndHour") doc[n] = v.toInt();
       else if (n == "dimEndMinute") doc[n] = v.toInt();
       else if (n == "dimBrightness") doc[n] = v.toInt();
+      else if (n == "vemlEnabled") doc[n] = (v == "true" || v == "on" || v == "1");
+      else if (n == "showLux") doc[n] = (v == "true" || v == "on" || v == "1");
+      else if (n == "luxThreshold") doc[n] = v.toInt();
       else if (n == "showWeatherDescription") doc[n] = (v == "true" || v == "on" || v == "1");
       else doc[n] = v;
     }
@@ -628,6 +659,48 @@ void setupWebServer() {
   request->send(200, "application/json", "{\"ok\":true}");
 });
 
+server.on("/set_veml", HTTP_POST, [](AsyncWebServerRequest *request) {
+  bool vemlEn = false;
+  if (request->hasParam("value", true)) {
+    String v = request->getParam("value", true)->value();
+    vemlEn = (v == "1" || v == "true" || v == "on");
+  }
+  vemlEnabled = vemlEn;
+  Serial.printf("[WEBSERVER] Set vemlEnabled to %d\n", vemlEnabled);
+  request->send(200, "application/json", "{\"ok\":true}");
+});
+
+server.on("/set_showlux", HTTP_POST, [](AsyncWebServerRequest *request) {
+  bool showLuxVal = false;
+  if (request->hasParam("value", true)) {
+    String v = request->getParam("value", true)->value();
+    showLuxVal = (v == "1" || v == "true" || v == "on");
+  }
+  showLux = showLuxVal;
+  Serial.printf("[WEBSERVER] Set showLux to %d\n", showLux);
+  request->send(200, "application/json", "{\"ok\":true}");
+});
+
+server.on("/set_luxthreshold", HTTP_POST, [](AsyncWebServerRequest *request) {
+  if (!request->hasParam("value", true)) {
+    request->send(400, "application/json", "{\"error\":\"Missing value\"}");
+    return;
+  }
+  int threshold = request->getParam("value", true)->value().toInt();
+  if (threshold < 0) threshold = 0;
+  if (threshold > 10000) threshold = 10000;
+  luxThreshold = threshold;
+  Serial.printf("[WEBSERVER] Set luxThreshold to %d\n", luxThreshold);
+  request->send(200, "application/json", "{\"ok\":true}");
+});
+
+server.on("/get_lux", HTTP_GET, [](AsyncWebServerRequest *request) {
+  String json = "{\"lux\": ";
+  json += String(currentLux);
+  json += "}";
+  request->send(200, "application/json", json);
+});
+
 server.on("/set_units", HTTP_POST, [](AsyncWebServerRequest *request) {
   if (request->hasParam("value", true)) {
     String v = request->getParam("value", true)->value();
@@ -842,6 +915,7 @@ DisplayMode key:
   0: Clock
   1: Weather
   2: Weather Description
+  3: LUX Reading
 */
 unsigned long descStartTime = 0;
 bool descScrolling = false;
@@ -859,6 +933,19 @@ void setup() {
     }
   }
   Serial.println(F("[SETUP] LittleFS file system mounted successfully."));
+
+  // Initialize I2C for VEML7700
+  Wire.begin(SDA_PIN, SCL_PIN);
+  
+  // Initialize VEML7700
+  if (veml.begin()) {
+    Serial.println(F("[SETUP] VEML7700 sensor found!"));
+    veml.setGain(VEML7700_GAIN_1);
+    veml.setIntegrationTime(VEML7700_IT_100MS);
+  } else {
+    Serial.println(F("[SETUP] VEML7700 sensor not found!"));
+    vemlEnabled = false;
+  }
 
   P.begin();
   P.setCharSpacing(0);
@@ -887,13 +974,16 @@ void advanceDisplayMode() {
     displayMode = 1; // clock -> weather
   } else if (displayMode == 1 && showWeatherDescription && weatherAvailable && weatherDescription.length() > 0) {
     displayMode = 2; // weather -> description
+  } else if ((displayMode == 1 || displayMode == 2) && showLux && vemlEnabled) {
+    displayMode = 3; // weather/description -> lux
   } else {
-    displayMode = 0; // description (or weather if no desc) -> clock
+    displayMode = 0; // description/lux -> clock
   }
   lastSwitch = millis();
   // Serial print for debugging
   const char* modeName = displayMode == 0 ? "CLOCK" :
-                         displayMode == 1 ? "WEATHER" : "DESCRIPTION";
+                         displayMode == 1 ? "WEATHER" :
+                         displayMode == 2 ? "DESCRIPTION" : "LUX";
   Serial.printf("[LOOP] Switching to display mode: %s\n", modeName);
 }
 
@@ -921,7 +1011,14 @@ void loop() {
     return;
   }
 
-  // Dimming
+  // Read from VEML7700 sensor
+  if (vemlEnabled && millis() - lastLuxCheck > luxCheckInterval) {
+    currentLux = veml.readLux();
+    Serial.printf("[VEML7700] Current LUX: %.2f\n", currentLux);
+    lastLuxCheck = millis();
+  }
+
+  // Dimming based on time or LUX
   time_t now = time(nullptr);
   struct tm timeinfo;
   localtime_r(&now, &timeinfo);
@@ -931,6 +1028,16 @@ void loop() {
   int startTotal = dimStartHour * 60 + dimStartMinute;
   int endTotal = dimEndHour * 60 + dimEndMinute;
   bool isDimming = false;
+  bool isDisplayOff = false;
+
+  // Check if display should be turned off based on LUX
+  if (vemlEnabled && currentLux < luxThreshold) {
+    isDisplayOff = true;
+    P.setIntensity(0); // Turn off display
+    P.displayClear();
+    yield();
+    return;
+  }
 
   if (dimmingEnabled) {
     if (startTotal < endTotal) {
@@ -1115,6 +1222,48 @@ void loop() {
         P.setTextAlignment(PA_CENTER);
         P.setCharSpacing(1);
         P.print(desc.c_str());
+        descStartTime = millis();
+      }
+      if (millis() - descStartTime > descriptionDuration) {
+        descStartTime = 0;
+        advanceDisplayMode();
+      }
+      yield();
+      return;
+    }
+  }
+  
+  // --- LUX Display Mode ---
+  if (displayMode == 3 && showLux && vemlEnabled) {
+    String luxStr = "LUX " + String((int)currentLux);
+    
+    if (luxStr.length() > 8) {
+      if (!descScrolling) {
+        P.displayClear();
+        P.displayScroll(luxStr.c_str(), PA_CENTER, PA_SCROLL_LEFT, 100);
+        descScrolling = true;
+        descScrollEndTime = 0; // reset end time at start
+      }
+      if (P.displayAnimate()) {
+        if (descScrollEndTime == 0) {
+          descScrollEndTime = millis(); // mark the time when scroll finishes
+        }
+        // wait small pause after scroll stops
+        if (millis() - descScrollEndTime > descriptionScrollPause) {
+          descScrolling = false;
+          descScrollEndTime = 0;
+          advanceDisplayMode();
+        }
+      } else {
+        descScrollEndTime = 0; // reset if not finished
+      }
+      yield();
+      return;
+    } else {
+      if (descStartTime == 0) {
+        P.setTextAlignment(PA_CENTER);
+        P.setCharSpacing(1);
+        P.print(luxStr.c_str());
         descStartTime = millis();
       }
       if (millis() - descStartTime > descriptionDuration) {

@@ -30,6 +30,7 @@ Get the 3D printable case!
 - **Day of the week display** in multiple languages
 - **Persistent Config** stored in LittleFS, with backup/restore system
 - **Status Animations** for WiFi conection, AP mode, time syncing.
+- **VEML7700 Ambient Light Sensor** for automatic brightness control and display on/off based on ambient light
 - **Advanced Settings** panel with:
   - Custom **Primary/Secondary NTP server** input
   - Display **Day of the Week** toggle (defualt in on)
@@ -37,9 +38,11 @@ Get the 3D printable case!
   - **Imperial Units (°F)** toggle (metric °C defaults)
   - Show **Humidity** toggle (display Humidity besides Temperature)
   - **Weather description** toggle (display Rainy, Clouds, Thunderstorm etc.)
+  - Show **LUX Reading** toggle (display ambient light level)
   - **Flip display** (180 degrees)
   - Adjustable display **brightness**
   - Dimming Hours **Scheduling**
+  - **LUX Threshold** for turning off display in dark environments
     
 ---
 
@@ -58,6 +61,15 @@ Get the 3D printable case!
 | D7            | 13      | CS      |
 | D8            | 15     | DIN     |
 | 3V3           | 3V3     | VCC     |
+
+**Wemos D1 Mini (ESP8266) → VEML7700**
+
+| Wemos D1 Mini (v3.x) | Wemos D1 Mini (v4.0) | VEML7700 |
+|:-------------:|:-------:|:-------:|
+| GND           | GND     | GND     |
+| D1            | D1      | SCL     |
+| D2            | D2      | SDA     |
+| 3V3           | 3V3     | VIN     |
 
 
 <img src="assets/wiring.png" alt="Wiring" width="800" />
@@ -94,7 +106,7 @@ The built-in web interface provides full configuration for:
 
 ## ⚙️ Advanced Settings
 
-Click the **cog icon** next to “Advanced Settings” in the web UI to reveal extra configuration options.  
+Click the **cog icon** next to "Advanced Settings" in the web UI to reveal extra configuration options.  
 
 **Available advanced settings:**
 
@@ -105,6 +117,9 @@ Click the **cog icon** next to “Advanced Settings” in the web UI to reveal e
 - **Imperial Units (°F)** toggle (metric °C defaults)
 - **Humidity**: Display Humidity besides Temperature
 - **Weather description** toggle (display Rainy, Clouds, Thunderstorm etc. for 3 seconds)
+- **VEML7700 Light Sensor**: Enable/disable the ambient light sensor
+- **Show LUX Reading**: Display the current ambient light level
+- **LUX Threshold**: Set the light level below which the display turns off
 - **Flip Display**: Invert the display vertically/horizontally
 - **Brightness**: 0 (dim) to 15 (bright)
 - **Dimming Feature**: Start time, end time and desired brightness selection 
@@ -145,6 +160,7 @@ Install these libraries (Library Manager / PlatformIO):
 - `MD_Parola / MD_MAX72xx` all dependencies by majicDesigns
 - `ESPAsyncTCP` by ESP32Async
 - `ESPAsyncWebServer` by ESP32Async
+- `Adafruit VEML7700 Library` by Adafruit
 
 ### LittleFS Upload
 
@@ -163,7 +179,7 @@ Install the [LittleFS Uploader](https://randomnerdtutorials.com/arduino-ide-2-in
 
 ## 📺 Display Behavior
 
-**ESPTimeCast** automatically switches between two display modes: Clock and Weather.
+**ESPTimeCast** automatically switches between display modes: Clock, Weather, Weather Description (if enabled), and LUX Reading (if enabled).
 If "Show Weather Description" is eneabled a third mode (Description) will display with a duration of 3 seconds, if the description is too long to fit on the display the description will scroll from right to left once.
 
 What you see on the LED matrix depends on whether the device has successfully fetched the current time (via NTP) and weather (via OpenWeatherMap).  
@@ -176,19 +192,21 @@ The following table summarizes what will appear on the display in each scenario:
 | **Weather**  | —          | ✅ Yes         | 🌡️ Temperature (e.g. `23ºC`)                |
 | **Weather**  | ✅ Yes      | ❌ No          | 🗓️ Day Icon + ⏰ Time (e.g. `@ 14:53`)           |
 | **Weather**  | ❌ No       | ❌ No          |  `! TEMP` (no weather or time data)       |
+| **LUX**      | —          | —              | 🔆 Light level (e.g. `LUX 250`)               |
 
 ### **How it works:**
 
-- The display automatically alternates between **Clock** and **Weather** modes (the duration for each is configurable).
-- If "Show Weather Description" is eneabled a third mode **Description** will display after the **Weather** display with a duration of 3 seconds.
-- In **Clock** mode, if NTP time is available, you’ll see the current time plus a unique day-of-week icon. If NTP is not available, you'll see `! NTP`.
-- In **Weather** mode, if weather is available, you’ll see the temperature (like `23ºC`). If weather is not available but time is, it falls back to showing the clock. If neither is available, you’ll see `! TEMP`.
+- The display automatically alternates between **Clock**, **Weather**, **Description** (if enabled), and **LUX** (if enabled) modes.
+- In **Clock** mode, if NTP time is available, you'll see the current time plus a unique day-of-week icon. If NTP is not available, you'll see `! NTP`.
+- In **Weather** mode, if weather is available, you'll see the temperature (like `23ºC`). If weather is not available but time is, it falls back to showing the clock. If neither is available, you'll see `! TEMP`.
+- In **LUX** mode, you'll see the current ambient light level measured by the VEML7700 sensor.
 - All status/error messages (`! NTP`, `! TEMP`) are big icons shown on the dsiplay.
 
 **Legend:**
 - 🗓️ **Day Icon**: Custom symbol for day of week (`@`, `=`, etc.)
 - ⏰ **Time**: Current time (HH:MM)
 - 🌡️ **Temperature**: Weather from OpenWeatherMap
+- 🔆 **LUX**: Light level from VEML7700 sensor
 - ✅ **Yes**: Data available
 - ❌ **No**: Data not available
 - — : Value does not affect this mode
@@ -198,4 +216,3 @@ The following table summarizes what will appear on the display in each scenario:
 ## ☕ Support this project
 
 If you like this project, you can [buy me a coffee](https://paypal.me/officialuphoto)!
-

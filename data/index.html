@@ -511,6 +511,31 @@ textarea::placeholder {
         </span>
       </label>
 
+      <!-- VEML7700 Light Sensor Toggle -->
+      <label style="display: flex; align-items: center; margin-top: 1.75rem; justify-content: space-between;">
+        <span style="margin-right: 0.5em;">Enable VEML7700 Light Sensor:</span>
+        <span class="toggle-switch">
+          <input type="checkbox" id="vemlEnabled" name="vemlEnabled" onchange="setVemlEnabled(this.checked)">
+          <span class="toggle-slider"></span>
+        </span>
+      </label>
+
+      <!-- Show LUX Reading Toggle -->
+      <label style="display: flex; align-items: center; margin-top: 1.75rem; justify-content: space-between;">
+        <span style="margin-right: 0.5em;">Show LUX Reading:</span>
+        <span class="toggle-switch">
+          <input type="checkbox" id="showLux" name="showLux" onchange="setShowLux(this.checked)">
+          <span class="toggle-slider"></span>
+        </span>
+      </label>
+
+      <!-- LUX Threshold Slider -->
+      <label style="margin-top: 1.75rem;">LUX Threshold: <span id="luxThresholdValue">10</span></label>
+      <input style="width: 100%;" type="range" min="0" max="1000" name="luxThreshold" id="luxThresholdSlider" value="10" 
+      oninput="luxThresholdValue.textContent = luxThresholdSlider.value; setLuxThreshold(this.value);">
+      <div class="small">Display turns off when LUX is below this value</div>
+      <br>
+
       <!-- Display Flip Toggle (Styled) -->
       <label style="display: flex; align-items: center; margin-top: 1.75rem; justify-content: space-between;">
         <span style="margin-right: 0.5em;">Flip Display (180°):</span>
@@ -619,6 +644,12 @@ window.onload = function () {
       document.getElementById('showWeatherDescription').addEventListener('change', function() {
         setShowWeatherDescription(this.checked);
       });
+      
+      // VEML7700 settings
+      document.getElementById('vemlEnabled').checked = !!data.vemlEnabled;
+      document.getElementById('showLux').checked = !!data.showLux;
+      document.getElementById('luxThresholdSlider').value = typeof data.luxThreshold !== "undefined" ? data.luxThreshold : 10;
+      document.getElementById('luxThresholdValue').textContent = document.getElementById('luxThresholdSlider').value;
 
             // Dimming controls
 const dimmingEnabledEl = document.getElementById('dimmingEnabled');
@@ -1027,6 +1058,30 @@ function setWeatherUnits(val) {
     method: 'POST',
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: "value=" + (val ? 1 : 0)
+  });
+}
+
+function setVemlEnabled(val) {
+  fetch('/set_veml', {
+    method: 'POST',
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "value=" + (val ? 1 : 0)
+  });
+}
+
+function setShowLux(val) {
+  fetch('/set_showlux', {
+    method: 'POST',
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "value=" + (val ? 1 : 0)
+  });
+}
+
+function setLuxThreshold(val) {
+  fetch('/set_luxthreshold', {
+    method: 'POST',
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "value=" + encodeURIComponent(val)
   });
 }
 
