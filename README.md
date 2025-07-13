@@ -67,8 +67,8 @@ Get the 3D printable case!
 | Wemos D1 Mini (v3.x) | Wemos D1 Mini (v4.0) | VEML7700 |
 |:-------------:|:-------:|:-------:|
 | GND           | GND     | GND     |
-| D1            | D1      | SCL     |
-| D2            | D2      | SDA     |
+| D1            | 5       | SCL     |
+| D2            | 4       | SDA     |
 | 3V3           | 3V3     | VIN     |
 
 
