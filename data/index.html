@@ -511,6 +511,15 @@ textarea::placeholder {
         </span>
       </label>
 
+      <!-- Show Temperature Toggle -->
+      <label style="display: flex; align-items: center; margin-top: 1.75rem; justify-content: space-between;">
+        <span style="margin-right: 0.5em;">Show Temperature:</span>
+        <span class="toggle-switch">
+          <input type="checkbox" id="showTemperature" name="showTemperature" onchange="setShowTemperature(this.checked)">
+          <span class="toggle-slider"></span>
+        </span>
+      </label>
+
       <!-- VEML7700 Light Sensor Toggle -->
       <label style="display: flex; align-items: center; margin-top: 1.75rem; justify-content: space-between;">
         <span style="margin-right: 0.5em;">Enable VEML7700 Light Sensor:</span>
@@ -645,6 +654,11 @@ window.onload = function () {
         setShowWeatherDescription(this.checked);
       });
       
+      document.getElementById('showTemperature').checked = data.showTemperature !== false; // Default to true
+      document.getElementById('showTemperature').addEventListener('change', function() {
+        setShowTemperature(this.checked);
+      });
+      
       // VEML7700 settings
       document.getElementById('vemlEnabled').checked = !!data.vemlEnabled;
       document.getElementById('showLux').checked = !!data.showLux;
@@ -758,6 +772,7 @@ async function submitConfig(event) {
   }
   formData.set('dimBrightness', document.getElementById('dimBrightness').value);
   formData.set('showWeatherDescription', document.getElementById('showWeatherDescription').checked ? 'on' : '');
+  formData.set('showTemperature', document.getElementById('showTemperature').checked ? 'on' : '');
   formData.set('weatherUnits', document.getElementById('weatherUnits').checked ? 'imperial' : 'metric');
 
 
@@ -1047,6 +1062,14 @@ function setLanguage(val) {
 
 function setShowWeatherDescription(val) {
   fetch('/set_weatherdesc', {
+    method: 'POST',
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "value=" + (val ? 1 : 0)
+  });
+}
+
+function setShowTemperature(val) {
+  fetch('/set_temperature', {
     method: 'POST',
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: "value=" + (val ? 1 : 0)
