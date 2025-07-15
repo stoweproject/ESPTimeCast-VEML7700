@@ -979,6 +979,12 @@ void advanceDisplayMode() {
   } else {
     displayMode = 0; // description/lux -> clock
   }
+  
+  // Skip LUX mode if showLux is disabled
+  if (displayMode == 3 && (!showLux || !vemlEnabled)) {
+    displayMode = 0;
+  }
+  
   lastSwitch = millis();
   // Serial print for debugging
   const char* modeName = displayMode == 0 ? "CLOCK" :
@@ -1013,7 +1019,7 @@ void loop() {
 
   // Read from VEML7700 sensor
   if (vemlEnabled && millis() - lastLuxCheck > luxCheckInterval) {
-    currentLux = veml.readLux();
+    currentLux = veml.readLux()*100;
     Serial.printf("[VEML7700] Current LUX: %.2f\n", currentLux);
     lastLuxCheck = millis();
   }
