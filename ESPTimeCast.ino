@@ -143,6 +143,7 @@ void loadConfig() {
     doc[F("vemlEnabled")] = vemlEnabled;
     doc[F("showLux")] = showLux;
     doc[F("luxThreshold")] = luxThreshold;
+    doc[F("showWeatherDescription")] = showWeatherDescription;
     File f = LittleFS.open("/config.json", "w");
     if (f) {
       serializeJsonPretty(doc, f);
@@ -219,10 +220,8 @@ void loadConfig() {
     tempSymbol = '[';
   Serial.println(F("[CONFIG] Configuration loaded."));
 
-  if (doc.containsKey("showWeatherDescription"))
-  showWeatherDescription = doc["showWeatherDescription"];
-else
-  showWeatherDescription = false;
+  String swd = doc["showWeatherDescription"].as<String>();
+  showWeatherDescription = (swd == "true" || swd == "on" || swd == "1");
 
 }
 
@@ -653,38 +652,9 @@ void setupWebServer() {
     request->send(200, "application/json", "{\"ok\":true}");
   });
 
-  server.on("/set_weatherdesc", HTTP_POST, [](AsyncWebServerRequest *request) {
-  bool showDesc = false;
-  if (request->hasParam("value", true)) {
-    String v = request->getParam("value", true)->value();
-    showDesc = (v == "1" || v == "true" || v == "on");
-  }
-  showWeatherDescription = showDesc;
-  Serial.printf("[WEBSERVER] Set showWeatherDescription to %d\n", showWeatherDescription);
-  request->send(200, "application/json", "{\"ok\":true}");
-});
+  
 
-server.on("/set_veml", HTTP_POST, [](AsyncWebServerRequest *request) {
-  bool vemlEn = false;
-  if (request->hasParam("value", true)) {
-    String v = request->getParam("value", true)->value();
-    vemlEn = (v == "1" || v == "true" || v == "on");
-  }
-  vemlEnabled = vemlEn;
-  Serial.printf("[WEBSERVER] Set vemlEnabled to %d\n", vemlEnabled);
-  request->send(200, "application/json", "{\"ok\":true}");
-});
 
-server.on("/set_showlux", HTTP_POST, [](AsyncWebServerRequest *request) {
-  bool showLuxVal = false;
-  if (request->hasParam("value", true)) {
-    String v = request->getParam("value", true)->value();
-    showLuxVal = (v == "1" || v == "true" || v == "on");
-  }
-  showLux = showLuxVal;
-  Serial.printf("[WEBSERVER] Set showLux to %d\n", showLux);
-  request->send(200, "application/json", "{\"ok\":true}");
-});
 
 server.on("/set_temperature", HTTP_POST, [](AsyncWebServerRequest *request) {
   bool showTemp = false;
@@ -697,18 +667,7 @@ server.on("/set_temperature", HTTP_POST, [](AsyncWebServerRequest *request) {
   request->send(200, "application/json", "{\"ok\":true}");
 });
 
-server.on("/set_luxthreshold", HTTP_POST, [](AsyncWebServerRequest *request) {
-  if (!request->hasParam("value", true)) {
-    request->send(400, "application/json", "{\"error\":\"Missing value\"}");
-    return;
-  }
-  int threshold = request->getParam("value", true)->value().toInt();
-  if (threshold < 0) threshold = 0;
-  if (threshold > 10000) threshold = 10000;
-  luxThreshold = threshold;
-  Serial.printf("[WEBSERVER] Set luxThreshold to %d\n", luxThreshold);
-  request->send(200, "application/json", "{\"ok\":true}");
-});
+
 
 server.on("/get_lux", HTTP_GET, [](AsyncWebServerRequest *request) {
   String json = "{\"lux\": ";
