@@ -772,6 +772,10 @@ async function submitConfig(event) {
   formData.set('showTemperature', document.getElementById('showTemperature').checked ? 'on' : '');
   formData.set('weatherUnits', document.getElementById('weatherUnits').checked ? 'imperial' : 'metric');
 
+  // VEML7700 settings
+  formData.set('vemlEnabled', document.getElementById('vemlEnabled').checked ? 'on' : '');
+  formData.set('showLux', document.getElementById('showLux').checked ? 'on' : '');
+  formData.set('luxThreshold', document.getElementById('luxThresholdSlider').value);
 
   const params = new URLSearchParams();
   for (const pair of formData.entries()) {
