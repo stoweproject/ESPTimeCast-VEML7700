@@ -373,6 +373,11 @@ void setupWebServer() {
 
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
     Serial.println(F("[WEBSERVER] Request: /"));
+    if (!LittleFS.exists("/index.html")) {
+      Serial.println(F("[WEBSERVER] index.html not found"));
+      request->send(404, "text/plain", "index.html not found");
+      return;
+    }
     request->send(LittleFS, "/index.html", "text/html");
   });
 
@@ -898,6 +903,7 @@ const unsigned long descriptionDuration = 3000; // 3s for short text
 
 void setup() {
   Serial.begin(115200);
+  delay(1000); // Give Serial time to initialize
   Serial.println();
   Serial.println(F("[SETUP] Starting setup..."));
 
@@ -908,6 +914,26 @@ void setup() {
     }
   }
   Serial.println(F("[SETUP] LittleFS file system mounted successfully."));
+  
+  // Debug filesystem info
+  FSInfo fs_info;
+  LittleFS.info(fs_info);
+  Serial.printf("[SETUP] LittleFS - Total: %u bytes, Used: %u bytes\n", fs_info.totalBytes, fs_info.usedBytes);
+  
+  // List all files
+  Serial.println(F("[SETUP] Files in LittleFS:"));
+  Dir dir = LittleFS.openDir("/");
+  while (dir.next()) {
+    Serial.printf("  %s - %u bytes\n", dir.fileName().c_str(), dir.fileSize());
+  }
+  
+  // Check if index.html exists
+  if (!LittleFS.exists("/index.html")) {
+    Serial.println(F("[SETUP] WARNING: index.html not found in LittleFS!"));
+    Serial.println(F("[SETUP] Please upload the data folder using 'Upload LittleFS to ESP8266'"));
+  } else {
+    Serial.printf("[SETUP] index.html found, size: %u bytes\n", LittleFS.open("/index.html", "r").size());
+  }
 
   // Initialize I2C for VEML7700
   Wire.begin(SDA_PIN, SCL_PIN);
